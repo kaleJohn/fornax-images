@@ -12,7 +12,7 @@ if [ -f /home/$NB_USER/.bashrc ]; then
     source /home/$NB_USER/.bashrc
 fi
 PROFILE
-    chown $NB_USER:$NB_USER /home/$NB_USER/.profile
+    chown $NB_UID:$NB_GID /home/$NB_USER/.profile
 fi
 # reset exit-on-error
 set -e
@@ -56,17 +56,23 @@ fi
 script=/tmp/kernel-warmer.sh
 cat <<EOF > $script
 set +ex
-sleep 300
 echo "Starting kernel warmer ..."
 cd $ENV_DIR
-for env in python3 heasoft \$(ls -d py-*) ciao fermi; do
+idle="ionice -c3 nice -n19"
+if test -x $DEFAULT_ENV/bin/python; then
+    echo "warming $DEFAULT_ENV (default kernel) .."
+    \$idle $DEFAULT_ENV/bin/python -m ipykernel -h > /dev/null
+    find $DEFAULT_ENV/bin $DEFAULT_ENV/lib -type f 2>/dev/null \
+        | \$idle xargs -P8 -n 50 cat > /dev/null 2>&1
+fi
+for env in heasoft \$(ls -d py-* 2>/dev/null) ciao fermi; do
     if test -x "\$env/bin/python"; then
         echo "warming \$env .."
-        \$env/bin/python -m ipykernel -h > /dev/null
+        \$idle \$env/bin/python -m ipykernel -h > /dev/null
     fi
 done
 echo "warming base .."
-find base/bin/ -type f | xargs -n 100 cat >/dev/null
+find base/bin/ -type f | \$idle xargs -P4 -n 100 cat >/dev/null
 echo "Done with kernel warmer ..."
 
 # remove the script
